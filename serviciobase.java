@@ -4,7 +4,6 @@ import java.time.format.DateTimeFormatter;
 /**
  * Plantilla base para los servicios del sistema.
  * Genera eventos periodicos cada 3 segundos con estados aleatorios (OK, WARNING, ERROR)
- * y soporta el argumento --force-error para pruebas de fallos.
  */
 public class ServicioBase {
 
