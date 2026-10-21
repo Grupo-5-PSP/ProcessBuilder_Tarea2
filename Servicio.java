@@ -1,42 +1,37 @@
 import java.util.Random;
 
 public class Servicio {
-
     public static void main(String[] args) {
-        String nombreServicio = (args.length > 0) ? args[0] : "DESCONOCIDO";
+        // Recoge el nombre del servicio que le pasa el Monitor (ej. "BaseDatos")
+        String nombre = args.length > 0 ? args[0] : "ServicioDesconocido";
         Random random = new Random();
 
-        String[] estados = {"OK", "WARNING", "ERROR"};
-        
-        // Bucle continuo (while(true) - Servicio de infraestructura IT)
+        // Bucle infinito exigido en SRV-01
         while (true) {
-            int indiceEstado = random.nextInt(3);
-            String estado = estados[indiceEstado];
-            String mensaje = generarMensajeAleatorio(nombreServicio, estado, random);
+            int probabilidad = random.nextInt(100);
+            String estado;
 
-            // Emitimos la salida en un formato estructurado para que el padre la lea
-            System.out.println(estado + "|" + mensaje);
-            System.out.flush();
+            // Lógica de estados aleatorios exigida en SRV-02
+            if (probabilidad < 70) {
+                estado = "OK";
+            } else if (probabilidad < 90) {
+                estado = "WARNING";
+            } else {
+                estado = "ERROR";
+                System.out.println("[" + nombre + "] [" + estado + "] Fallo crítico. Apagando...");
+                // Esto simula que el programa se cierra de golpe. 
+                // Al cerrarse, tu isAlive() del Monitor lo detectará y lo reiniciará.
+                System.exit(1); 
+            }
 
+            System.out.println("[" + nombre + "] [" + estado + "] Funcionando correctamente.");
+
+            // Retraso exacto de 3 segundos exigido en SRV-01
             try {
-                // Heartbeat / Estado del servicio cada 3 segundos
                 Thread.sleep(3000);
             } catch (InterruptedException e) {
                 break;
             }
-        }
-    }
-
-    private static String generarMensajeAleatorio(String servicio, String estado, Random r) {
-        switch (estado) {
-            case "OK":
-                return "Estado del servicio: Operativo (Ping " + (r.nextInt(20) + 5) + "ms)";
-            case "WARNING":
-                return "Elevado tráfico de red o uso de CPU detectado (" + (70 + r.nextInt(20)) + "%)";
-            case "ERROR":
-                return "Fallo en la conexión o tiempo de respuesta excedido";
-            default:
-                return "Respuesta procesada correctamente";
         }
     }
 }
