@@ -75,6 +75,9 @@ public class MonitorPrincipal {
                 break;
             }
         }
+
+        // === FIN DE ACTUALIZACIÓN CORE-02 =======
+        
     }
 
     private static Process lanzarServicio(String nombreServicio) {
