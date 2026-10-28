@@ -6,81 +6,82 @@ import java.time.format.DateTimeFormatter;
 
 public class MonitorPrincipal {
 
-    private static final String[] NOMBRES = {
-        "DATABASE", "WEB_SERVER", "FTP_SERVER", "MAIL_SERVER", "FIREWALL", "LOAD_BALANCER", "BACKUP"
-    };
-
     public static void main(String[] args) {
-        System.out.println("=== PANEL DE CONTROL - LECTURA NO BLOQUEANTE ===");
+        String[] nombresServicios = {"DATABASE", "WEB_SERVER", "FTP_SERVER", "MAIL_SERVER", "FIREWALL", "BALANCER", "BACKUP"};
+        Process[] procesos = new Process[nombresServicios.length];
+        // Array de lectores BufferedReader (Requisito obligatorio 2.A)
+        BufferedReader[] lectores = new BufferedReader[nombresServicios.length];
+        DateTimeFormatter formatoHora = DateTimeFormatter.ofPattern("HH:mm:ss");
 
-        Process[] procesos = new Process[7];
-        BufferedReader[] lectores = new BufferedReader[7];
+        System.out.println("[" + LocalTime.now().format(formatoHora) + "] [MONITOR] [OK] Iniciando el arranque de los 7 servicios...");
 
-        // === ACTUALIZACIÓN (PASO 1): Array para controlar el último mensaje de cada servicio ===
-        long[] ultimoMensaje = new long[7];
-        for (int i = 0; i < 7; i++) {
-            ultimoMensaje[i] = System.currentTimeMillis();
-        }
-
-        // Arrancar los 7 procesos hijos
-        for (int i = 0; i < NOMBRES.length; i++) {
-            try {
-                procesos[i] = lanzarServicio(NOMBRES[i]);
+        // 1. Lanzamiento inicial de los 7 procesos y conexión de sus BufferedReader
+        for (int i = 0; i < nombresServicios.length; i++) {
+            procesos[i] = lanzarServicio(nombresServicios[i]);
+            if (procesos[i] != null) {
                 lectores[i] = new BufferedReader(new InputStreamReader(procesos[i].getInputStream()));
-            } catch (Exception e) {
-                System.err.println("[-] Error al arrancar el servicio: " + NOMBRES[i]);
             }
         }
 
-        // === ACTUALIZACIÓN (PASO 2): Bucle infinito principal ===
+        // 2. Bucle principal: Lectura sin bloqueos (.ready()) + Detección de caídas y reinicio
         while (true) {
-            try {
-                // === ACTUALIZACIÓN (PASO 3): Recorrer los 7 servicios uno por uno ===
-                for (int i = 0; i < 7; i++) {
-                    if (lectores[i] != null) {
-                        
-                        // === ACTUALIZACIÓN (PASO 4): Lectura no bloqueante con ready() ===
-                        if (lectores[i].ready()) {
-                            String linea = lectores[i].readLine();
-                            if (linea != null) {
-                                ultimoMensaje[i] = System.currentTimeMillis();
-                                procesarEImprimir(linea, NOMBRES[i]);
-                            }
+            for (int i = 0; i < procesos.length; i++) {
+                try {
+                    // PARTE DE SERGIO (CORE-02): Leer sin hilos usando .ready() para no bloquear
+                    while (lectores[i] != null && lectores[i].ready()) {
+                        String linea = lectores[i].readLine();
+                        if (linea != null) {
+                            // PARTE DE ALDAIR (FMT-01): Añadir [HH:mm:ss] al mensaje del servicio
+                            String horaActual = LocalTime.now().format(formatoHora);
+                            System.out.println("[" + horaActual + "] " + linea);
                         }
                     }
+
+                    // PARTE DE ALDAIR (RES-01 y RES-02): Detectar si el proceso cayó y reiniciarlo
+                    if (procesos[i] == null || !procesos[i].isAlive()) {
+                        String horaActual = LocalTime.now().format(formatoHora);
+                        System.out.println("[" + horaActual + "] [" + nombresServicios[i] + "] [ALERTA] El servicio ha caído. Reiniciando...");
+                        
+                        procesos[i] = lanzarServicio(nombresServicios[i]);
+                        if (procesos[i] != null) {
+                            lectores[i] = new BufferedReader(new InputStreamReader(procesos[i].getInputStream()));
+                        }
+                    }
+                } catch (IOException e) {
+                    System.out.println("[MONITOR] [ERROR] Fallo leyendo el servicio " + nombresServicios[i]);
                 }
+            }
 
-                // === ACTUALIZACIÓN (PASO 5): Micro-pausa de 100ms para no saturar la CPU ===
-                Thread.sleep(100);
-
-            } catch (Exception e) {
-                System.err.println("Error en el bucle principal: " + e.getMessage());
+            // Pausa breve para no saturar la CPU mientras escanea los 7 servicios
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                break;
             }
         }
     }
 
-    private static Process lanzarServicio(String nombreServicio) throws IOException {
-        ProcessBuilder pb = new ProcessBuilder(
-            "java",
-            "-cp",
-            System.getProperty("java.class.path"),
-            "Servicio",
-            nombreServicio
-        );
-        return pb.start();
-    }
-
-    private static void procesarEImprimir(String linea, String servicio) {
-        String timestamp = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
-        String estado = "INFO";
-        String mensaje = linea;
-
-        if (linea.contains("|")) {
-            String[] partes = linea.split("\\|", 2);
-            estado = partes[0];
-            mensaje = partes[1];
+    private static Process lanzarServicio(String nombreServicio) {
+        try {
+          
+            // === ACTUALIZACIÓN CORE-01: Configuración de classpath para ProcessBuilder ===
+            // Se añaden "-cp" y "System.getProperty("java.class.path")" para que Java
+            // localice correctamente la clase "Servicio" dentro del directorio del proyecto.
+        
+            ProcessBuilder pb = new ProcessBuilder(
+                "java", 
+                "-cp", 
+                System.getProperty("java.class.path"), 
+                "Servicio", 
+                nombreServicio
+            );
+            
+            // Unimos errores con salida estándar para leer todo con el mismo BufferedReader
+            pb.redirectErrorStream(true);
+            return pb.start();
+        } catch (IOException e) {
+            System.out.println("[MONITOR] [ERROR] No se pudo lanzar: " + nombreServicio);
+            return null;
         }
-
-        System.out.printf("[%s] [%s] [%s] %s%n", timestamp, servicio, estado, mensaje);
     }
 }
