@@ -14,18 +14,17 @@ public class MonitorPrincipal {
 
         System.out.println("[" + LocalTime.now().format(formatoHora) + "] [MONITOR] [OK] Iniciando el arranque de los 7 servicios...");
 
-        // =========================================================================
-        // === INICIO DE ACTUALIZACIÓN CORE-02 (PASO 1): Array ultimoMensaje ===
-        // =========================================================================
+        // === INICIO DE ACTUALIZACIÓN CORE-02 (PASO 1): Array ultimoMensaje 
+    
         long[] ultimoMensaje = new long[nombresServicios.length];
         for (int i = 0; i < nombresServicios.length; i++) {
             ultimoMensaje[i] = System.currentTimeMillis();
         }
-        // =========================================================================
-        // === FIN DE ACTUALIZACIÓN CORE-02 (PASO 1) ===============================
-        // =========================================================================
+        
+        // === FIN DE ACTUALIZACIÓN CORE-02 (PASO 1) 
+      
 
-        // Lanzamiento inicial de los 7 procesos y conexión de sus BufferedReader
+        // Lanzamiento inicial de los 7 procesos y conexión de sus BufferedReader aldair
         for (int i = 0; i < nombresServicios.length; i++) {
             procesos[i] = lanzarServicio(nombresServicios[i]);
             if (procesos[i] != null) {
@@ -33,9 +32,9 @@ public class MonitorPrincipal {
             }
         }
 
-        // =========================================================================
+       
         // === INICIO DE ACTUALIZACIÓN CORE-02 (PASOS 2, 3, 4 y 5): Bucle y lectura ===
-        // =========================================================================
+        
         
         // PASO 2: Bucle infinito while (true) en el main
         while (true) {
@@ -80,16 +79,15 @@ public class MonitorPrincipal {
                 break;
             }
         }
-        // =========================================================================
-        // === FIN DE ACTUALIZACIÓN CORE-02 ========================================
-        // =========================================================================
+     
+        // === FIN DE ACTUALIZACIÓN CORE-02 =======
+      
     }
 
     private static Process lanzarServicio(String nombreServicio) {
         try {
-            // =========================================================================
             // === ACTUALIZACIÓN CORE-01: Configuración de classpath para ProcessBuilder ===
-            // =========================================================================
+            
             ProcessBuilder pb = new ProcessBuilder(
                 "java", 
                 "-cp", 
@@ -106,3 +104,4 @@ public class MonitorPrincipal {
         }
     }
 }
+
