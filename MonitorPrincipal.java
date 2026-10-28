@@ -14,17 +14,7 @@ public class MonitorPrincipal {
 
         System.out.println("[" + LocalTime.now().format(formatoHora) + "] [MONITOR] [OK] Iniciando el arranque de los 7 servicios...");
 
-        // === INICIO DE ACTUALIZACIÓN CORE-02 (PASO 1): Array ultimoMensaje 
-    
-        long[] ultimoMensaje = new long[nombresServicios.length];
-        for (int i = 0; i < nombresServicios.length; i++) {
-            ultimoMensaje[i] = System.currentTimeMillis();
-        }
-        
-        // === FIN DE ACTUALIZACIÓN CORE-02 (PASO 1) 
-      
-
-        // Lanzamiento inicial de los 7 procesos y conexión de sus BufferedReader aldair
+        // Lanzamiento inicial de los 7 procesos y conexión de sus BufferedReader
         for (int i = 0; i < nombresServicios.length; i++) {
             procesos[i] = lanzarServicio(nombresServicios[i]);
             if (procesos[i] != null) {
@@ -32,48 +22,19 @@ public class MonitorPrincipal {
             }
         }
 
-       
-        // === INICIO DE ACTUALIZACIÓN CORE-02 (PASOS 2, 3, 4 y 5): Bucle y lectura ===
-        
-        
-        // PASO 2: Bucle infinito while (true) en el main
+        // Bucle principal de monitorización
         while (true) {
-            try {
-                // PASO 3: Bucle for para revisar cada servicio uno por uno
-                for (int i = 0; i < procesos.length; i++) {
-                    
-                    // PASO 4: Lectura no bloqueante con if (lectores[i].ready())
-                    if (lectores[i] != null && lectores[i].ready()) {
+            for (int i = 0; i < procesos.length; i++) {
+                try {
+                    while (lectores[i] != null && lectores[i].ready()) {
                         String linea = lectores[i].readLine();
                         if (linea != null) {
-                            // Actualizar timestamp del último mensaje recibido
-                            ultimoMensaje[i] = System.currentTimeMillis();
-                            
-                            // Formateo e impresión del mensaje
                             String horaActual = LocalTime.now().format(formatoHora);
-                            System.out.println("[" + horaActual + "] [" + nombresServicios[i] + "] " + linea);
+                            System.out.println("[" + horaActual + "] " + linea);
                         }
                     }
-                   
-                    // === INICIO DE ACTUALIZACIÓN CORE-03: Control de Timeout / Watchdog ======
-                    // Comprueba si han pasado más de 10 segundos (10000 ms) sin recibir mensajes
-                   
-                    if (procesos[i] != null && procesos[i].isAlive()) {
-                        long tiempoActual = System.currentTimeMillis();
-                        // Si pasan 10 segundos sin actividad del servicio
-                        if ((tiempoActual - ultimoMensaje[i]) > 10000) {
-                            String horaActual = LocalTime.now().format(formatoHora);
-                            System.out.println("[" + horaActual + "] [" + nombresServicios[i] + "] [WARNING] Sin actividad reciente (posible bloqueo).");
-                            // Actualizamos el timestamp para evitar saturar la consola con avisos continuos
-                            ultimoMensaje[i] = tiempoActual;
-                        }
-                    }
-                  
-                    // === FIN DE ACTUALIZACIÓN CORE-03 ========================================
-                 
-                    // Si ready() es false, pasa al siguiente servicio inmediatamente sin bloquearse.
 
-                    // Control de caídas y reinicio automático
+                    // Detección de caídas y reinicio automático
                     if (procesos[i] == null || !procesos[i].isAlive()) {
                         String horaActual = LocalTime.now().format(formatoHora);
                         System.out.println("[" + horaActual + "] [" + nombresServicios[i] + "] [ALERTA] El servicio ha caído. Reiniciando...");
@@ -81,30 +42,25 @@ public class MonitorPrincipal {
                         procesos[i] = lanzarServicio(nombresServicios[i]);
                         if (procesos[i] != null) {
                             lectores[i] = new BufferedReader(new InputStreamReader(procesos[i].getInputStream()));
-                            ultimoMensaje[i] = System.currentTimeMillis();
                         }
                     }
+                } catch (IOException e) {
+                    System.out.println("[MONITOR] [ERROR] Fallo leyendo el servicio " + nombresServicios[i]);
                 }
+            }
 
-                // PASO 5: Micro-pausa de 100ms antes de la siguiente vuelta del while
-                Thread.sleep(100);
-
-            } catch (IOException e) {
-                System.out.println("[MONITOR] [ERROR] Fallo en la lectura de los servicios.");
+            // Pausa breve para no saturar la CPU
+            try {
+                Thread.sleep(200);
             } catch (InterruptedException e) {
-                System.out.println("[MONITOR] [INFO] El monitor principal ha sido interrumpido.");
                 break;
             }
         }
-     
-        // === FIN DE ACTUALIZACIÓN CORE-02 =======
-      
     }
 
     private static Process lanzarServicio(String nombreServicio) {
         try {
-            // === ACTUALIZACIÓN CORE-01: Configuración de classpath para ProcessBuilder ===
-            
+            // === ACTUALIZACIÓN CORE-01: Configuración del classpath para ProcessBuilder ===
             ProcessBuilder pb = new ProcessBuilder(
                 "java", 
                 "-cp", 
