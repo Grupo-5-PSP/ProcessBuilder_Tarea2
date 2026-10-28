@@ -1,53 +1,74 @@
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 
 public class MonitorPrincipal {
 
     public static void main(String[] args) {
-        // Nombres de los 7 servicios que exige la práctica
-        String[] nombresServicios = {"BaseDatos", "Web", "FTP", "Correo", "Firewall", "Balanceador", "Backup"};
+        String[] nombresServicios = {"DATABASE", "WEB_SERVER", "FTP_SERVER", "MAIL_SERVER", "FIREWALL", "BALANCER", "BACKUP"};
         Process[] procesos = new Process[nombresServicios.length];
+        // Array de lectores BufferedReader (Requisito obligatorio 2.A)
+        BufferedReader[] lectores = new BufferedReader[nombresServicios.length];
+        DateTimeFormatter formatoHora = DateTimeFormatter.ofPattern("HH:mm:ss");
 
-        System.out.println("[MONITOR] Iniciando el arranque de servicios...");
+        System.out.println("[" + LocalTime.now().format(formatoHora) + "] [MONITOR] [OK] Iniciando el arranque de los 7 servicios...");
 
-        // 1. TAREA DE SERGIO: Lanzamiento inicial de los 7 procesos
+        // 1. Lanzamiento inicial de los 7 procesos y conexión de sus BufferedReader
         for (int i = 0; i < nombresServicios.length; i++) {
             procesos[i] = lanzarServicio(nombresServicios[i]);
+            if (procesos[i] != null) {
+                lectores[i] = new BufferedReader(new InputStreamReader(procesos[i].getInputStream()));
+            }
         }
 
-        // 2. TU TAREA (FMT-01 / RES-02): Detección de caídas y reinicio automático
+        // 2. Bucle principal: Lectura sin bloqueos (.ready()) + Detección de caídas y reinicio
         while (true) {
             for (int i = 0; i < procesos.length; i++) {
-                // Si el proceso es nulo o isAlive() devuelve false, significa que ha fallado o se ha apagado
-                if (procesos[i] == null || !procesos[i].isAlive()) {
-                    System.out.println("[ALERTA] [" + nombresServicios[i] + "] [ERROR] El servicio ha caído. Reiniciando...");
-                    // Se invoca un nuevo ProcessBuilder.start() exclusivamente para el servicio caído
-                    procesos[i] = lanzarServicio(nombresServicios[i]);
+                try {
+                    // PARTE DE SERGIO (CORE-02): Leer sin hilos usando .ready() para no bloquear
+                    while (lectores[i] != null && lectores[i].ready()) {
+                        String linea = lectores[i].readLine();
+                        if (linea != null) {
+                            // PARTE DE ALDAIR (FMT-01): Añadir [HH:mm:ss] al mensaje del servicio
+                            String horaActual = LocalTime.now().format(formatoHora);
+                            System.out.println("[" + horaActual + "] " + linea);
+                        }
+                    }
+
+                    // PARTE DE ALDAIR (RES-01 y RES-02): Detectar si el proceso cayó y reiniciarlo
+                    if (procesos[i] == null || !procesos[i].isAlive()) {
+                        String horaActual = LocalTime.now().format(formatoHora);
+                        System.out.println("[" + horaActual + "] [" + nombresServicios[i] + "] [ALERTA] El servicio ha caído. Reiniciando...");
+                        
+                        procesos[i] = lanzarServicio(nombresServicios[i]);
+                        if (procesos[i] != null) {
+                            lectores[i] = new BufferedReader(new InputStreamReader(procesos[i].getInputStream()));
+                        }
+                    }
+                } catch (IOException e) {
+                    System.out.println("[MONITOR] [ERROR] Fallo leyendo el servicio " + nombresServicios[i]);
                 }
             }
 
-            // Pequeña pausa de 2 segundos para no saturar el procesador del ordenador con el bucle infinito
+            // Pausa breve para no saturar la CPU mientras escanea los 7 servicios
             try {
-                Thread.sleep(2000);
+                Thread.sleep(200);
             } catch (InterruptedException e) {
-                System.out.println("Error en la pausa del monitor.");
+                break;
             }
         }
     }
 
-    // Método auxiliar que instancia el ProcessBuilder
     private static Process lanzarServicio(String nombreServicio) {
         try {
-            // Llama a la clase Servicio.java compilada y le pasa el nombre como argumento
             ProcessBuilder pb = new ProcessBuilder("java", "Servicio", nombreServicio);
-            
-            // TRUCO CRÍTICO: Al no poder usar hilos, INHERIT hace que los System.out del 
-            // subproceso se impriman directamente en la consola principal sin bloquear el código.
-            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-            pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-            
+            // Unimos errores con salida estándar para leer todo con el mismo BufferedReader
+            pb.redirectErrorStream(true);
             return pb.start();
         } catch (IOException e) {
-            System.out.println("[MONITOR] Error grave al intentar lanzar: " + nombreServicio);
+            System.out.println("[MONITOR] [ERROR] No se pudo lanzar: " + nombreServicio);
             return null;
         }
     }
