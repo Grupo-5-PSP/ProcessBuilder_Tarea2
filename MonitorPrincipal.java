@@ -54,6 +54,23 @@ public class MonitorPrincipal {
                             System.out.println("[" + horaActual + "] [" + nombresServicios[i] + "] " + linea);
                         }
                     }
+                   
+                    // === INICIO DE ACTUALIZACIÓN CORE-03: Control de Timeout / Watchdog ======
+                    // Comprueba si han pasado más de 10 segundos (10000 ms) sin recibir mensajes
+                   
+                    if (procesos[i] != null && procesos[i].isAlive()) {
+                        long tiempoActual = System.currentTimeMillis();
+                        // Si pasan 10 segundos sin actividad del servicio
+                        if ((tiempoActual - ultimoMensaje[i]) > 10000) {
+                            String horaActual = LocalTime.now().format(formatoHora);
+                            System.out.println("[" + horaActual + "] [" + nombresServicios[i] + "] [WARNING] Sin actividad reciente (posible bloqueo).");
+                            // Actualizamos el timestamp para evitar saturar la consola con avisos continuos
+                            ultimoMensaje[i] = tiempoActual;
+                        }
+                    }
+                  
+                    // === FIN DE ACTUALIZACIÓN CORE-03 ========================================
+                 
                     // Si ready() es false, pasa al siguiente servicio inmediatamente sin bloquearse.
 
                     // Control de caídas y reinicio automático
