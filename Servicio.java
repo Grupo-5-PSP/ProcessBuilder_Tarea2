@@ -1,6 +1,25 @@
 import java.util.Random;
 
+/**
+ * Clase principal que he programado para simular un servicio del sistema en red.
+ * Me encargo de emitir latidos periódicos de su estado (OK, WARNING, ERROR o datos corruptos)
+ * basándome en probabilidades aleatorias y soportando argumentos externos de control.
+ * 
+ * @author Alonso
+ * @version 2.0
+ */
 public class Servicio {
+    
+    /**
+     * Método principal que gestiono en esta aplicación. Aquí recojo los argumentos de consola,
+     * compruebo si me llega la opción de error forzado y ejecuto el bucle infinito 
+     * con la simulación de fallos (70% OK, 15% WARNING, 5% datos corruptos, 
+     * 5% congelación y 5% caída total).
+     * 
+     * @param args Argumentos de la línea de comandos:
+     *             args[0] = Nombre de mi servicio (ej. DATABASE, WEB_SERVER, etc.).
+     *             args[1] = Opcional, argumento de control (--force-error).
+     */
     public static void main(String[] args) {
         
         // Cojo el nombre del servicio desde args[0]. Si me he olvidado de pasarlo, 
@@ -9,52 +28,50 @@ public class Servicio {
                                 ? args[0] 
                                 : "DESCONOCIDO";
         
-        // 1. Si se le pasa este segundo argumento,
-        // el proceso se rompe de golpe y se cierra con código 1 para sus pruebas.
+        // 1. Compruebo si me llega el argumento para forzar el error y cerrar de golpe.
         if (args.length > 1 && args[1].equals("--force-error")) {
             System.out.println(nombreServicio + ";ERROR;Error forzado por argumento externo");
             System.out.flush();
             System.exit(1);
         }
         
-        // Instancio la clase Random (por si la necesitamos para otros utils).
+        // Instancio la clase Random por si la necesito.
         Random random = new Random();
 
-        // no para nunca por sí mismo, 
-        // se queda emitiendo su estado hasta que el proceso padre lo mate.
+        // Bucle infinito: este servicio emite su estado de manera continua.
         while (true) {
             
-            // 2. Generamos un número aleatorio decimal (entre 0.0 y 1.0) para evaluar las probabilidades.
+            // 2. Genero un número aleatorio decimal (entre 0.0 y 1.0) para calcular las probabilidades.
             double prob = Math.random();
             
             String estado = "OK";
             String mensaje = "";
 
-            // 3. APLICAMOS LOS RANGOS DE PROBABILIDAD (en cada ciclo de 3 segundos):
+            // 3. Aplico mis rangos de probabilidad en cada ciclo de 3 segundos:
             
             if (prob < 0.70) {
-                // 70% (prob < 0.70): Emite estado normal OK con su mensaje realista del switch.
+                // 70% (prob < 0.70): Emito estado normal OK con su mensaje realista del switch.
                 estado = "OK";
                 mensaje = generarMensaje(nombreServicio, estado);
                 System.out.println(nombreServicio + ";" + estado + ";" + mensaje);
                 System.out.flush();
                 
             } else if (prob < 0.85) { 
-                // 15% (prob >= 0.70 && prob < 0.85): Emite estado de alerta WARNING.
+                // 15% (prob >= 0.70 && prob < 0.85): Emito estado de alerta WARNING.
                 estado = "WARNING";
                 mensaje = generarMensaje(nombreServicio, estado);
                 System.out.println(nombreServicio + ";" + estado + ";" + mensaje);
                 System.out.flush();
                 
             } else if (prob < 0.90) { 
-                // 5% (prob >= 0.85 && prob < 0.90): Emite dato corrupto o malformado 
-                // (sin puntos y comas) para poner a prueba el validador del coordinador.
+                // 5% (prob >= 0.85 && prob < 0.90): Emito un dato corrupto o malformado 
+                // (sin puntos y comas) para probar el validador.
                 System.out.println("###DATO_CORRUPTO_SIN_FORMATO###");
                 System.out.flush();
                 
             } else if (prob < 0.95) { 
-                // 5% (prob >= 0.90 && prob < 0.95): Simula que el servicio se queda colgado 
-                // o congelado dejando de emitir mensajes durante 15 segundos.
+                // 5% (prob >= 0.90 && prob < 0.95): Simulo que me quedo congelado 
+                // dejando de emitir mensajes durante 15 segundos.
                 try {
                     Thread.sleep(15000);
                 } catch (InterruptedException e) {
@@ -62,8 +79,8 @@ public class Servicio {
                 }
                 
             } else { 
-                // 5% restante (prob >= 0.95): Simula caída total del servicio, 
-                // imprime el fallo crítico y cierra el proceso con código 1.
+                // 5% restante (prob >= 0.95): Simulo una caída total, 
+                // imprimo el fallo crítico y cierro el proceso con código 1.
                 System.out.println(nombreServicio + ";ERROR;Fallo crítico del proceso");
                 System.out.flush();
                 System.exit(1);
@@ -78,11 +95,16 @@ public class Servicio {
         }
     }
 
-    // --- MÉTODO AUXILIAR: SWITCH CON LOS 7 SERVICIOS ---
+    /**
+     * Método auxiliar que he creado para generar un mensaje descriptivo y realista 
+     * según el tipo de servicio y su estado de salud utilizando un switch.
+     * Al pasarle el argumento en consola sabe cuál es, y si no le pasamos nada usa "DESCONOCIDO".
+     * 
+     * @param nombreServicio El nombre identificativo de mi servicio (ej. DATABASE, FIREWALL).
+     * @param estado El estado actual ("OK" o "WARNING").
+     * @return Un String con el texto técnico correspondiente.
+     */
     public static String generarMensaje(String nombreServicio, String estado) {
-        // Normalizamos el nombre a mayúsculas por seguridad
-        // Al pasarle el argumento en java Servicio (x) pues sabe cual es
-        // si no le pasamos nada como al principio [args0], pues pasa desconocido
         String servicio = (nombreServicio != null) ? nombreServicio.toUpperCase() : "DESCONOCIDO";
 
         switch (servicio) {
@@ -122,7 +144,6 @@ public class Servicio {
                 return "Error crítico al volcar los datos en el disco";
                 
             default:
-                // Por si se introduce cualquier otro nombre por consola
                 if (estado.equals("OK")) return "Servicio genérico operativo";
                 if (estado.equals("WARNING")) return "Elevada carga detectada";
                 return "Fallo crítico general. Apagando...";
