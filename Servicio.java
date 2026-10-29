@@ -9,42 +9,67 @@ public class Servicio {
                                 ? args[0] 
                                 : "DESCONOCIDO";
         
-        // Instancio la clase Random para tirar los números aleatorios de las probabilidades.
+        // 1. Si se le pasa este segundo argumento,
+        // el proceso se rompe de golpe y se cierra con código 1 para sus pruebas.
+        if (args.length > 1 && args[1].equals("--force-error")) {
+            System.out.println(nombreServicio + ";ERROR;Error forzado por argumento externo");
+            System.out.flush();
+            System.exit(1);
+        }
+        
+        // Instancio la clase Random (por si la necesitamos para otros utils).
         Random random = new Random();
 
-        // Bucle infinito: este servicio no para nunca por sí mismo, 
+        // no para nunca por sí mismo, 
         // se queda emitiendo su estado hasta que el proceso padre lo mate.
         while (true) {
             
-            // Saco un número del 0 al 99 para ver qué salud tiene el servicio en este ciclo.
-            int probabilidad = random.nextInt(100);
+            // 2. Generamos un número aleatorio decimal (entre 0.0 y 1.0) para evaluar las probabilidades.
+            double prob = Math.random();
             
-            // Inicializamos las variables con valores por defecto
             String estado = "OK";
             String mensaje = "";
 
-            // Lógica de estados con sus porcentajes (70% OK, 20% WARNING, 10% ERROR)
-            if (probabilidad < 70) {
+            // 3. APLICAMOS LOS RANGOS DE PROBABILIDAD (en cada ciclo de 3 segundos):
+            
+            if (prob < 0.70) {
+                // 70% (prob < 0.70): Emite estado normal OK con su mensaje realista del switch.
                 estado = "OK";
-            } else if (probabilidad < 90) {
-                estado = "WARNING";
-            } else {
-                // Error crítico. Imprimimos el mensaje específico de error del servicio, hacemos flush y cerramos con código 1.
-                System.out.println(nombreServicio + ";ERROR;" + generarMensaje(nombreServicio, "ERROR"));
+                mensaje = generarMensaje(nombreServicio, estado);
+                System.out.println(nombreServicio + ";" + estado + ";" + mensaje);
                 System.out.flush();
-                System.exit(1); 
+                
+            } else if (prob < 0.85) { 
+                // 15% (prob >= 0.70 && prob < 0.85): Emite estado de alerta WARNING.
+                estado = "WARNING";
+                mensaje = generarMensaje(nombreServicio, estado);
+                System.out.println(nombreServicio + ";" + estado + ";" + mensaje);
+                System.out.flush();
+                
+            } else if (prob < 0.90) { 
+                // 5% (prob >= 0.85 && prob < 0.90): Emite dato corrupto o malformado 
+                // (sin puntos y comas) para poner a prueba el validador del coordinador.
+                System.out.println("###DATO_CORRUPTO_SIN_FORMATO###");
+                System.out.flush();
+                
+            } else if (prob < 0.95) { 
+                // 5% (prob >= 0.90 && prob < 0.95): Simula que el servicio se queda colgado 
+                // o congelado dejando de emitir mensajes durante 15 segundos.
+                try {
+                    Thread.sleep(15000);
+                } catch (InterruptedException e) {
+                    break;
+                }
+                
+            } else { 
+                // 5% restante (prob >= 0.95): Simula caída total del servicio, 
+                // imprime el fallo crítico y cierra el proceso con código 1.
+                System.out.println(nombreServicio + ";ERROR;Fallo crítico del proceso");
+                System.out.flush();
+                System.exit(1);
             }
 
-            // Generamos el mensaje realista llamando al método auxiliar con el switch
-            mensaje = generarMensaje(nombreServicio, estado);
-
-            // Saco el resultado con el formato exacto de puntos y comas
-            System.out.println(nombreServicio + ";" + estado + ";" + mensaje);
-
-            // Fuerzo el búfer con flush para que lea el mensaje al instante y no se quede atascado.
-            System.out.flush();
-
-            // Hacemos que espere 3 segundos exactos antes de volver a emitir el siguiente latido.
+            // 4. Pausa estándar de 3 segundos entre cada latido normal.
             try {
                 Thread.sleep(3000);
             } catch (InterruptedException e) {
@@ -53,11 +78,11 @@ public class Servicio {
         }
     }
 
-    // --- NUEVO MÉTODO AUXILIAR: SWITCH CON LOS 7 SERVICIOS ---
+    // --- MÉTODO AUXILIAR: SWITCH CON LOS 7 SERVICIOS ---
     public static String generarMensaje(String nombreServicio, String estado) {
         // Normalizamos el nombre a mayúsculas por seguridad
         // Al pasarle el argumento en java Servicio (x) pues sabe cual es
-        //  si no le pasamos nada como al principio [args0], pues pasa desconocido
+        // si no le pasamos nada como al principio [args0], pues pasa desconocido
         String servicio = (nombreServicio != null) ? nombreServicio.toUpperCase() : "DESCONOCIDO";
 
         switch (servicio) {
