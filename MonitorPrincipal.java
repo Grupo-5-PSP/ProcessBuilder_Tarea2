@@ -12,6 +12,11 @@ public class MonitorPrincipal {
     /** RES-01: milisegundos sin mensajes tras los cuales un servicio vivo se considera mudo. */
     private static final long TIMEOUT_MS = 8000;
 
+    //  INICIO RES-02 (PARTE DE ALDAIR) 
+    /** RES-02: milisegundos que se espera desde el último mensaje de un servicio caído antes de reiniciarlo. */
+    private static final long ESPERA_REINICIO_MS = 3000;
+    // FIN RES-02 (constante)
+
     public static void main(String[] args) {
         String[] nombresServicios = {"DATABASE", "WEB_SERVER", "FTP_SERVER", "MAIL_SERVER", "FIREWALL", "BALANCER", "BACKUP"};
         Process[] procesos = new Process[nombresServicios.length];
@@ -31,7 +36,7 @@ public class MonitorPrincipal {
             ultimoMensaje[i] = System.currentTimeMillis();
         }
 
-        // 2. Bucle principal: Lectura sin bloqueos (.ready()) + vigilancia de servicios (RES-01)
+        // 2. Bucle principal: Lectura sin bloqueos (.ready()) + vigilancia (RES-01) + reinicio (RES-02)
         while (true) {
             for (int i = 0; i < procesos.length; i++) {
                 try {
@@ -47,8 +52,16 @@ public class MonitorPrincipal {
                         }
                     }
 
-                    // RES-01: detectar caída (con código de salida) y servicio mudo
+                    // PARTE DE ALDAIR (RES-01): detectar caída (con código de salida) y servicio mudo
                     verificarSaludServicio(i, nombresServicios[i], procesos, lectores, ultimoMensaje);
+
+                    // ================== INICIO RES-02 (PARTE DE ALDAIR) ==================
+                    // Reinicio automático: si el servicio quedó caído (procesos[i] == null, lo deja así RES-01)
+                    // y han pasado ESPERA_REINICIO_MS desde su último mensaje, se vuelve a lanzar.
+                    if (procesos[i] == null && System.currentTimeMillis() - ultimoMensaje[i] >= ESPERA_REINICIO_MS) {
+                        reiniciarServicio(i, nombresServicios[i], procesos, lectores, ultimoMensaje);
+                    }
+                    // =================== FIN RES-02 (bucle principal) ====================
 
                 } catch (IOException e) {
                     System.out.println("[" + LocalTime.now().format(FORMATO_HORA) + "] [MONITOR] [ERROR] Fallo leyendo el servicio " + nombresServicios[i]);
@@ -69,7 +82,7 @@ public class MonitorPrincipal {
      * Caso 1: el proceso ha muerto, se informa de su código de salida.
      * Caso 2: el proceso sigue vivo pero lleva más de TIMEOUT_MS sin hablar, se destruye.
      * Tras reportar el fallo, el servicio queda marcado como caído (procesos[indice] = null),
-     * de modo que se informa una sola vez. El reinicio posterior es la tarea RES-02.
+     * de modo que se informa una sola vez. Su reinicio lo hace reiniciarServicio (RES-02).
      *
      * @param indice        posición del servicio en los arrays
      * @param nombre        nombre del servicio
@@ -96,7 +109,6 @@ public class MonitorPrincipal {
                 }
             } catch (IOException e) {
                 // No queda nada más que leer
-                
             }
             System.out.println("[" + LocalTime.now().format(FORMATO_HORA) + "] [" + nombre
                     + "] [ERROR] El servicio se ha detenido inesperadamente (Código: " + proceso.exitValue() + ").");
@@ -118,6 +130,44 @@ public class MonitorPrincipal {
             marcarComoCaido(indice, procesos, lectores);
         }
     }
+
+    //  INICIO RES-02 (PARTE DE ALDAIR) 
+    /**
+     * RES-02: reinicia un servicio caído. Cierra su lector antiguo, lanza un proceso nuevo,
+     * conecta su nuevo lector, reinicia su reloj y confirma el reinicio por consola.
+     * Solo afecta al servicio indicado: los demás siguen monitorizándose.
+     *
+     * @param indice        posición del servicio en los arrays
+     * @param nombre        nombre del servicio
+     * @param procesos      procesos lanzados
+     * @param lectores      lectores de la salida de cada servicio
+     * @param ultimoMensaje hora (ms) del último mensaje recibido de cada servicio
+     */
+    private static void reiniciarServicio(int indice, String nombre, Process[] procesos,
+                                          BufferedReader[] lectores, long[] ultimoMensaje) {
+        // Se cierra el lector antiguo (si quedó alguno abierto) para liberar recursos
+        try {
+            if (lectores[indice] != null) {
+                lectores[indice].close();
+            }
+        } catch (IOException e) {
+            // Se ignora: el lector ya no sirve
+        }
+
+        // Se lanza el proceso nuevo y se conecta su lector
+        procesos[indice] = lanzarServicio(nombre);
+        if (procesos[indice] != null) {
+            lectores[indice] = new BufferedReader(new InputStreamReader(procesos[indice].getInputStream()));
+            System.out.println("[" + LocalTime.now().format(FORMATO_HORA) + "] [" + nombre
+                    + "] [OK] Servicio reiniciado y operativo nuevamente");
+        } else {
+            lectores[indice] = null; // lanzarServicio ya ha informado del error
+        }
+
+        // El servicio recién lanzado empieza a contar desde ahora
+        ultimoMensaje[indice] = System.currentTimeMillis();
+    }
+    //  FIN RES-02 (método)
 
     /**
      * Marca un servicio como caído: cierra su lector y deja su proceso a null
@@ -149,6 +199,5 @@ public class MonitorPrincipal {
             System.out.println("[" + LocalTime.now().format(FORMATO_HORA) + "] [MONITOR] [ERROR] No se pudo lanzar: " + nombreServicio);
             return null;
         }
-       
     }
 }
