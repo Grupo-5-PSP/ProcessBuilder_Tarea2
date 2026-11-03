@@ -20,14 +20,38 @@ public class MonitorPrincipal {
     public static void main(String[] args) {
         String[] nombresServicios = {"DATABASE", "WEB_SERVER", "FTP_SERVER", "MAIL_SERVER", "FIREWALL", "BALANCER", "BACKUP"};
         Process[] procesos = new Process[nombresServicios.length];
-        // Array de lectores BufferedReader (Requisito obligatorio 2.A)
         BufferedReader[] lectores = new BufferedReader[nombresServicios.length];
         // RES-01: hora (en ms) del último mensaje recibido de cada servicio
         long[] ultimoMensaje = new long[nombresServicios.length];
 
-        System.out.println("[" + LocalTime.now().format(FORMATO_HORA) + "] [MONITOR] [OK] Iniciando el arranque de los 7 servicios...");
 
-        // 1. Lanzamiento inicial de los 7 procesos y conexión de sus BufferedReader
+        System.out.println("[" + LocalTime.now().format(FORMATO_HORA) + "] [MONITOR] [OK] Iniciando el arranque de los 7 servicios...");
+        System.out.println("[MONITOR] [INFO] Escribe 'q' en la consola y pulsa Enter para apagar el monitor de forma segura.");
+
+        
+
+
+        // ACTUALIZACIÓN CORE-02 (PASO 1): Array de control ultimoMensaje====
+    
+        for (int i = 0; i < nombresServicios.length; i++) {
+            ultimoMensaje[i] = System.currentTimeMillis();
+        }
+
+        // CORE-03 INICIO: Array para almacenar el último estado de cada servicio====
+  
+        String[] ultimosEstados = new String[nombresServicios.length];
+        for (int i = 0; i < nombresServicios.length; i++) {
+            ultimosEstados[i] = "INICIALIZANDO";
+        }
+        
+        // Lector para la entrada de teclado (System.in) sin bloquear hilos
+        BufferedReader lectorTeclado = new BufferedReader(new InputStreamReader(System.in));
+        long ultimoTiempoPanel = System.currentTimeMillis();
+   
+        // CORE-03 FIN===
+
+
+        // Lanzamiento inicial de los 7 procesos y conexión de sus BufferedReader
         for (int i = 0; i < nombresServicios.length; i++) {
             procesos[i] = lanzarServicio(nombresServicios[i]);
             if (procesos[i] != null) {
@@ -36,24 +60,86 @@ public class MonitorPrincipal {
             ultimoMensaje[i] = System.currentTimeMillis();
         }
 
+
+        // ACTUALIZACIÓN CORE-02 (PASOS 2, 3, 4 y 5): Bucle de lectura no bloqueante===
+
+        
+        // PASO 2: Bucle infinito en el main
+
         // 2. Bucle principal: Lectura sin bloqueos (.ready()) + vigilancia (RES-01) + reinicio (RES-02)
         while (true) {
-            for (int i = 0; i < procesos.length; i++) {
-                try {
-                    // PARTE DE SERGIO (CORE-02): Leer sin hilos usando .ready() para no bloquear
-                    while (lectores[i] != null && lectores[i].ready()) {
+            try {
+              
+                // CORE-03 INICIO: Lectura no bloqueante de consola para apagado con "q"====
+             
+                if (lectorTeclado.ready()) {
+                    String comando = lectorTeclado.readLine();
+                    if (comando != null && comando.trim().equalsIgnoreCase("q")) {
+                        String horaActual = LocalTime.now().format(FORMATO_HORA);
+                        System.out.println("[" + horaActual + "] [MONITOR] [INFO] Comando de apagado recibido. Cerrando monitor...");
+                        break; // Sale del bucle while
+                    }
+                }
+                // CORE-03 FIN===
+           
+
+                // PASO 3: Recorrer los servicios uno por uno rápidamente
+                for (int i = 0; i < procesos.length; i++) {
+                    try {
+
+                    // PASO 4: Lectura no bloqueante comprobando .ready()
+                    if (lectores[i] != null && lectores[i].ready()) {
                         String linea = lectores[i].readLine();
                         if (linea != null) {
-                            // RES-01: el servicio acaba de hablar
+
+                            // Actualizar el timestamp del último mensaje recibido
                             ultimoMensaje[i] = System.currentTimeMillis();
-                            // PARTE DE ALDAIR (FMT-01): Añadir [HH:mm:ss] al mensaje del servicio
+                            
+                         
+                            // CORE-03 INICIO: Actualizar el último estado según el mensaje recibido ===
+                           
+                            if (linea.contains("OK")) {
+                                ultimosEstados[i] = "OK";
+                            } else if (linea.contains("WARNING")) {
+                                ultimosEstados[i] = "WARNING";
+                            } else if (linea.contains("ERROR")) {
+                                ultimosEstados[i] = "ERROR";
+                            }
+                            // CORE-03 FIN
+                         
+
+                            // PARTE DE ALDAIR (FMT-01): Añadir [HH:mm:ss] al mensaje del servicio y filtrar datos corruptos
                             String horaActual = LocalTime.now().format(FORMATO_HORA);
-                            System.out.println("[" + horaActual + "] " + linea);
+                            // Una línea válida tiene el formato [ID] [ESTADO] mensaje, con ESTADO = OK, WARNING o ERROR
+                            if (!linea.matches("^\\[[A-Za-z0-9_]+\\] \\[(OK|WARNING|ERROR)\\] .+$")) {
+                                ultimosEstados[i] = "ANOMALÍA";
+                                System.out.println("[" + horaActual + "] [" + nombresServicios[i] + "] [ANOMALÍA] Dato corrupto detectado: " + linea);
+                            } else {
+                                System.out.println("[" + horaActual + "] " + linea);
+                            }
+
                         }
                     }
+                    // Si ready() es false, no se bloquea y pasa inmediatamente al siguiente servicio.
+
+
+                    // CORE-03 INICIO: Comprobación de "SIN RESPUESTA" por inactividad (> 5 segundos)
+                 
+                    if (procesos[i] != null && procesos[i].isAlive()) {
+                        if (System.currentTimeMillis() - ultimoMensaje[i] > 5000) {
+                            ultimosEstados[i] = "SIN RESPUESTA";
+                        }
+                    }
+                    // CORE-03 FIN===
+                  
 
                     // PARTE DE ALDAIR (RES-01): detectar caída (con código de salida) y servicio mudo
                     verificarSaludServicio(i, nombresServicios[i], procesos, lectores, ultimoMensaje);
+
+                    // CORE-03: Marcar estado como CAÍDO si RES-01 ha dado el servicio por caído
+                    if (procesos[i] == null) {
+                        ultimosEstados[i] = "CAÍDO";
+                    }
 
                     // ================== INICIO RES-02 (PARTE DE ALDAIR) ==================
                     // Reinicio automático: si el servicio quedó caído (procesos[i] == null, lo deja así RES-01)
@@ -63,18 +149,50 @@ public class MonitorPrincipal {
                     }
                     // =================== FIN RES-02 (bucle principal) ====================
 
-                } catch (IOException e) {
-                    System.out.println("[" + LocalTime.now().format(FORMATO_HORA) + "] [MONITOR] [ERROR] Fallo leyendo el servicio " + nombresServicios[i]);
-                }
-            }
+                    } catch (IOException e) {
+                        System.out.println("[" + LocalTime.now().format(FORMATO_HORA) + "] [MONITOR] [ERROR] Fallo leyendo el servicio " + nombresServicios[i]);
 
-            // Pausa breve para no saturar la CPU mientras escanea los 7 servicios
-            try {
-                Thread.sleep(200);
+                    }
+                }
+
+     
+                // CORE-03 INICIO: Impresión periódica del panel de estados cada 3 segundos===
+               
+                if (System.currentTimeMillis() - ultimoTiempoPanel > 3000) {
+                    System.out.println("\n========== [PANEL DE ESTADO DE LOS SERVICIOS] ==========");
+                    for (int j = 0; j < nombresServicios.length; j++) {
+                        System.out.println("  > " + String.format("%-12s", nombresServicios[j]) + " -> Estado: " + ultimosEstados[j]);
+                    }
+                    System.out.println("========================================================\n");
+                    ultimoTiempoPanel = System.currentTimeMillis();
+                }
+             
+                // CORE-03 FIN===
+               
+
+                // PASO 5: Micro-pausa de 100ms para no saturar el procesador
+                Thread.sleep(100);
+
+            } catch (IOException e) {
+                System.out.println("[MONITOR] [ERROR] Fallo en la lectura de los flujos I/O.");
             } catch (InterruptedException e) {
+                System.out.println("[MONITOR] [INFO] El monitor principal ha sido interrumpido.");
                 break;
             }
         }
+
+        // CORE-03 INICIO: Apagado seguro destruyendo los 7 procesos para evitar huérfanos===
+
+        System.out.println("[MONITOR] [INFO] Destruyendo subprocesos activos...");
+        for (int i = 0; i < procesos.length; i++) {
+            if (procesos[i] != null && procesos[i].isAlive()) {
+                procesos[i].destroy(); // Envía señal de terminación
+            }
+        }
+        System.out.println("[MONITOR] [OK] Todos los servicios han sido detenidos. Monitor finalizado.");
+       
+        // CORE-03 FIN===
+       
     }
 
     /**
@@ -191,8 +309,16 @@ public class MonitorPrincipal {
 
     private static Process lanzarServicio(String nombreServicio) {
         try {
-            ProcessBuilder pb = new ProcessBuilder("java", "Servicio", nombreServicio);
-            // Unimos errores con salida estándar para leer todo con el mismo BufferedReader
+          
+            // ACTUALIZACIÓN CORE-01: Configuración de classpath para ProcessBuilder====
+            ProcessBuilder pb = new ProcessBuilder(
+                "java", 
+                "-cp", 
+                System.getProperty("java.class.path"), 
+                "Servicio", 
+                nombreServicio
+            );
+            
             pb.redirectErrorStream(true);
             return pb.start();
         } catch (IOException e) {
